@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #define PATH_SIZE 255
 #define BUFFER_SIZE 200
@@ -35,18 +37,56 @@ void pwd() {
     printf("%s\n", myPath);
 }
 
-void ls(char *args[]) {
+void ls(char **args) {
     pid_t pid = fork();
     if (pid == 0) {
         execvp(args[0], args);
-        perror("execvp error");
-    } else
-        perror("fork error");
+        printf("execvp error\n");
+    } else if (pid < 0)
+        printf("fork error\n");
     wait(NULL);
 }
 
 void pid() {
     printf("%d\n", getpid());
+}
+
+void myChmod(char *file, char *arg) {
+    if (file == NULL || arg == NULL) {
+        printf("command error\n");
+        return;
+    }
+    int a = atoi(arg);
+    int u = a / 100;
+    int g = a / 10 % 10;
+    int o = a % 10;
+    if (a < 0 || a > 777 || u > 7 || g > 7 || o > 7) {
+        printf("invalid mode\n");
+        return;
+    }
+
+    int permission = 0;
+    if (u / 4 % 2 == 1)
+        permission += S_IRUSR;
+    if (u / 2 % 2 == 1)
+        permission += S_IWUSR;
+    if (u % 2 == 1)
+        permission += S_IXUSR;
+    if (g / 4 % 2 == 1)
+        permission += S_IRGRP;
+    if (g / 2 % 2 == 1)
+        permission += S_IWGRP;
+    if (g % 2 == 1)
+        permission += S_IXGRP;
+    if (o / 4 % 2 == 1)
+        permission += S_IROTH;
+    if (o / 2 % 2 == 1)
+        permission += S_IWOTH;
+    if (o % 2 == 1)
+        permission += S_IXOTH;
+
+    if (chmod(file, permission) < 0)
+        printf("chmod error\n");
 }
 
 int main() {
@@ -88,6 +128,8 @@ int main() {
             pid();
         else if (strcmp(cmd[0], "exit") == 0)
             break;
+        else if (strcmp(cmd[0], "chmod") == 0)
+            myChmod(cmd[2], cmd[1]);
         else
             printf("no command %s\n", cmd[0]);
     }
