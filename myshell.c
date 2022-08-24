@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <pwd.h>
+#include <shadow.h>
 
 #define PATH_SIZE 255
 #define BUFFER_SIZE 200
@@ -15,17 +16,19 @@ char myPath[PATH_SIZE];
 char oldPath[PATH_SIZE];
 int nowUmask;
 
-// 字符数组转8进制
+// 字符数组转3位8进制数
 int atoo(char *arr) {
+    if (arr == NULL)
+        return -1;
+
     int a = atoi(arr);
     int u = a / 100;
     int g = a / 10 % 10;
     int o = a % 10;
-    if (a < 0 || a > 777 || u > 7 || g > 7 || o > 7) {
-        printf("invalid mode: %s\n", arr);
+    if (a < 0 || a > 777 || u > 7 || g > 7 || o > 7)
         return -1;
-    }
 
+    // 除2取余法
     a = 0;
     if (u / 4 % 2 == 1)
         a += S_IRUSR;
@@ -105,18 +108,62 @@ void myChmod(char *file, char *arg) {
         return;
     }
 
-    int permission = atoo(arg);
+    int permission;
+    if (permission = atoo(arg)) {
+        printf("invalid mode: %s\n", arg);
+        return;
+    }
 
     if (chmod(file, permission))
         perror("chmod error");
 }
 
 void myChown(char *file, char *owner) {
+    if (file == NULL || owner == NULL) {
+        printf("command error\n");
+        return;
+    }
 
+    if (access(file, F_OK)) {
+        printf("file not found: %s\n", file);
+        return;
+    }
+
+    // 根据字符串返回包含uid和gid等信息的结构体
+    struct passwd *pwd = getpwnam(owner);
+    if (pwd == NULL) {
+        printf("not a user: %s\n", owner);
+        return;
+    }
+    uid_t uid = pwd->pw_uid;
+
+    // uid或gid的值为-1时，对应的id不变
+    if (chown(file, uid, -1))
+        perror("chown error");
 }
 
 void myChgrp(char *file, char *group) {
+    if (file == NULL || group == NULL) {
+        printf("command error\n");
+        return;
+    }
 
+    if (access(file, F_OK)) {
+        printf("file not found: %s\n", file);
+        return;
+    }
+
+    // 根据字符串返回包含uid和gid等信息的结构体
+    struct passwd *pwd = getpwnam(group);
+    if (pwd == NULL) {
+        printf("not a group: %s\n", group);
+        return;
+    }
+    gid_t gid = pwd->pw_gid;
+
+    // uid或gid的值为-1时，对应的id不变
+    if (chown(file, -1, gid))
+        perror("chgrp error");
 }
 
 void myMkdir(char *dir) {
@@ -155,8 +202,13 @@ void myUmask(char *newUmask) {
         return;
     }
 
-    nowUmask = atoo(newUmask);
+    int mask;
+    if (mask = atoo(newUmask)) {
+        printf("not octal number\n");
+        return;
+    }
 
+    nowUmask = mask;
     umask(nowUmask);
 }
 
@@ -242,11 +294,27 @@ void rm(char *file) {
         perror("rm error");
 }
 
-void ln() {
+void ln(char **args) {
+    if (args[1] == NULL || args[2] == NULL || (!strcmp(args[1], "-s") && args[3] == NULL)) {
+        printf("need more permission\n");
+        return;
+    }
 
+    if (strcmp(args[1], "-s")) {
+        if (link(args[1], args[2]))
+            perror("ln error");
+    } else {
+        if (symlink(args[2], args[3]))
+            perror("ln error");
+    }
 }
 
 void cat(char *file) {
+    if (file == NULL) {
+        printf("need file name\n");
+        return;
+    }
+
     int fd;
     if ((fd = open(file, O_RDONLY)) == -1) {
         perror("read file error");
@@ -265,8 +333,25 @@ void cat(char *file) {
         perror("cat error");
 }
 
-void passwd() {
+void passwd(char *owner) {
+    if (owner == NULL) {
+        // 得到用户名
+        struct passwd *pwd = getpwuid(getuid());
+        owner = pwd->pw_name;
+    }
 
+    // 输出用户密码
+    struct spwd *spwd = getspnam(owner);
+    if (spwd == NULL) {
+        printf("not a user: %s\n", owner);
+        return;
+    }
+    printf("%s:%s\n", owner, spwd->sp_pwdp);
+
+    // 调用外部程序passwd
+    char cmd[CMD_SIZE] = "passwd ";
+    strcat(cmd, owner);
+    system(cmd);
 }
 
 int main() {
@@ -328,11 +413,11 @@ int main() {
         else if (!strcmp(cmd[0], "rm"))
             rm(cmd[1]);
         else if (!strcmp(cmd[0], "ln"))
-            ln();
+            ln(cmd);
         else if (!strcmp(cmd[0], "cat"))
             cat(cmd[1]);
         else if (!strcmp(cmd[0], "passwd"))
-            passwd();
+            passwd(cmd[1]);
         else
             printf("no command %s\n", cmd[0]);
     }
