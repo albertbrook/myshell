@@ -7,14 +7,22 @@
 #include <sys/stat.h>
 #include <pwd.h>
 #include <shadow.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #define PATH_SIZE 255
 #define BUFFER_SIZE 200
 #define CMD_SIZE 100
+#define CMD_COUNT 50
 
 char myPath[PATH_SIZE];
 char oldPath[PATH_SIZE];
 int nowUmask;
+
+struct desc {
+    char *command;
+    char *describe;
+};
 
 // 字符数组转3位8进制数
 int atoo(char *arr) {
@@ -52,6 +60,22 @@ int atoo(char *arr) {
     return a;
 }
 
+struct desc myDesc[CMD_COUNT] = {
+        {"cd",  "cd 进入目录\ncd [path]\nNULL\t家目录\n~\t家目录\n-\t上一级目录"},
+        {"pwd", "pwd 打印当前工作目录"},
+        {"lls", "lls 列出所有文件和文件夹"}
+};
+
+void help(char *cmd) {
+    for (int i = 0; i < CMD_COUNT && myDesc[i].command != NULL; ++i) {
+        if (!strcmp(myDesc[i].command, cmd)) {
+            printf("%s\n", myDesc[i].describe);
+            return;
+        }
+    }
+    printf("not found command: %s\n", cmd);
+}
+
 void cd(char *path) {
     if (path == NULL || !strcmp(path, "~"))
         path = "/root";
@@ -79,18 +103,31 @@ void pwd() {
     printf("%s\n", myPath);
 }
 
-void ls(char **args) {
-    // 创建子进程
-    pid_t pid = fork();
-    if (pid == 0) {
-        // 数组必须以NULL结尾
-        execvp(args[0], args);
-        // 成功执行结束当前进程，否则继续
-        perror("execvp error");
-    } else if (pid < 0)
-        perror("fork error");
-    // 等待子进程结束
-    wait(NULL);
+void lls(char *dir) {
+    if (dir == NULL) {
+        char path[PATH_SIZE];
+        getcwd(path, PATH_SIZE);
+        dir = path;
+    }
+
+    DIR *d = opendir(dir);
+    if (d == NULL) {
+        printf("dir not exist\n");
+        return;
+    }
+
+    struct dirent *ptr;
+    while (ptr = readdir(d)) {
+        if (ptr->d_type == 4)
+            printf("\033[31m%s\t", ptr->d_name);
+        else if (ptr->d_type == 8)
+            printf("\033[32m%s\t", ptr->d_name);
+        else if (ptr->d_type == 10)
+            printf("\033[34m%s\t", ptr->d_name);
+    }
+
+    printf("\n\033[37m");
+    closedir(d);
 }
 
 void pid() {
@@ -354,6 +391,67 @@ void passwd(char *owner) {
     system(cmd);
 }
 
+void ed(char *file) {
+    if (file == NULL) {
+        printf("need file name\n");
+        return;
+    }
+
+    //
+}
+
+void touch(char *file) {
+    if (file == NULL) {
+        printf("need file name\n");
+        return;
+    }
+
+    if (!access(file, F_OK)) {
+        printf("file exist\n");
+        return;
+    }
+
+    int fd;
+    if ((fd = creat(file, 0644)) == -1) {
+        perror("create file error");
+        return;
+    }
+
+    char buffer[] = "\0";
+    if (write(fd, buffer, 0) == -1)
+        perror("touch error");
+
+    close(fd);
+}
+
+void format(char *style) {
+    if (style == NULL)
+        style = "0";
+
+    if (style[0] != '3' && style[0] != '4')
+        printf("\033[%cm", style[0]);
+    else
+        printf("\033[%c%cm", style[0], style[1]);
+}
+
+void clear() {
+    printf("\033c");
+}
+
+void call(char **args) {
+    // 创建子进程
+    pid_t pid = fork();
+    if (pid == 0) {
+        // 数组必须以NULL结尾
+        execvp(args[0], args);
+        // 成功执行结束当前进程，否则继续
+        perror("execvp error");
+    } else if (pid < 0)
+        perror("fork error");
+    // 等待子进程结束
+    wait(NULL);
+}
+
 int main() {
     cd(NULL);
     nowUmask = 0022;
@@ -384,12 +482,14 @@ int main() {
         // 空格回车
         if (cmd[0] == NULL)
             continue;
+        else if (cmd[1] != NULL && !strcmp(cmd[1], "?"))
+            help(cmd[0]);
         else if (!strcmp(cmd[0], "cd"))
             cd(cmd[1]);
         else if (!strcmp(cmd[0], "pwd"))
             pwd();
-        else if (!strcmp(cmd[0], "ls"))
-            ls(cmd);
+        else if (!strcmp(cmd[0], "lls"))
+            lls(cmd[1]);
         else if (!strcmp(cmd[0], "pid"))
             pid();
         else if (!strcmp(cmd[0], "exit"))
@@ -418,8 +518,16 @@ int main() {
             cat(cmd[1]);
         else if (!strcmp(cmd[0], "passwd"))
             passwd(cmd[1]);
+        else if (!strcmp(cmd[0], "ed"))
+            ed(cmd[1]);
+        else if (!strcmp(cmd[0], "touch"))
+            touch(cmd[1]);
+        else if (!strcmp(cmd[0], "format"))
+            format(cmd[1]);
+        else if (!strcmp(cmd[0], "c"))
+            clear();
         else
-            printf("no command %s\n", cmd[0]);
+            call(cmd);
     }
     return 0;
 }
