@@ -63,7 +63,25 @@ int atoo(char *arr) {
 struct desc myDesc[CMD_COUNT] = {
         {"cd",  "cd 进入目录\ncd [path]\nNULL\t家目录\n~\t家目录\n-\t上一级目录"},
         {"pwd", "pwd 打印当前工作目录"},
-        {"lls", "lls 列出所有文件和文件夹"}
+        {"lls", "lls 列出所有文件和文件夹"},
+        {"pid", "pid 打印pid"},
+        {"exit", "exit 退出"},
+        {"chmod", "chmod 改变权限"},
+        {"chown", ""},
+        {"chgrp", ""},
+        {"mkdir", ""},
+        {"rmdir", ""},
+        {"umask", ""},
+        {"mv", ""},
+        {"cp", ""},
+        {"rm", ""},
+        {"ln", ""},
+        {"cat", ""},
+        {"passwd", ""},
+        {"ed", ""},
+        {"touch", ""},
+        {"format", ""},
+        {"c", ""}
 };
 
 void help(char *cmd) {
@@ -203,34 +221,48 @@ void myChgrp(char *file, char *group) {
         perror("chgrp error");
 }
 
-void myMkdir(char *dir) {
-    if (dir == NULL) {
+void myMkdir(char **dirs) {
+    if (dirs == NULL) {
         printf("need directory name\n");
         return;
     }
 
-    if (!access(dir, F_OK)) {
-        printf("dir or file exist: %s\n", dir);
-        return;
-    }
+    int index = 0;
+    while (1) {
+        ++index;
+        if (dirs[index] == NULL)
+            break;
 
-    if (mkdir(dir, 0755))
-        perror("create dir error");
+        if (!access(dirs[index], F_OK)) {
+            printf("dir or file exist: %s\n", dirs[index]);
+            continue;
+        }
+
+        if (mkdir(dirs[index], 0755))
+            printf("create dir error: %s\n", dirs[index]);
+    }
 }
 
-void myRmdir(char *dir) {
-    if (dir == NULL) {
+void myRmdir(char **dirs) {
+    if (dirs == NULL) {
         printf("need directory name\n");
         return;
     }
 
-    if (access(dir, F_OK)) {
-        printf("dir not exist: %s\n", dir);
-        return;
-    }
+    int index = 0;
+    while (1) {
+        ++index;
+        if (dirs[index] == NULL)
+            break;
 
-    if (rmdir(dir))
-        perror("delete dir error");
+        if (access(dirs[index], F_OK)) {
+            printf("dir not exist: %s\n", dirs[index]);
+            continue;
+        }
+
+        if (rmdir(dirs[index]))
+            printf("delete dir error: %s\n", dirs[index]);
+    }
 }
 
 void myUmask(char *newUmask) {
@@ -261,7 +293,15 @@ void mv(char *oldName, char *newName) {
     }
 
     if (!access(newName, F_OK)) {
-        printf("dir or file exist: %s\n", newName);
+        if (opendir(newName) != NULL) {
+            char newFile[PATH_SIZE] = "\0";
+            strcat(newFile, newName);
+            strcat(newFile, "/");
+            strcat(newFile, oldName);
+            if (rename(oldName, newFile))
+                perror("mv error");
+        } else
+            printf("file exist: %s\n", newName);
         return;
     }
 
@@ -316,19 +356,26 @@ void cp(char *oldName, char *newName) {
         perror("cp error");
 }
 
-void rm(char *file) {
-    if (file == NULL) {
+void rm(char **files) {
+    if (files == NULL) {
         printf("need file name\n");
         return;
     }
 
-    if (access(file, F_OK)) {
-        printf("file not exist: %s\n", file);
-        return;
-    }
+    int index = 0;
+    while (1) {
+        ++index;
+        if (files[index] == NULL)
+            break;
 
-    if (remove(file))
-        perror("rm error");
+        if (access(files[index], F_OK)) {
+            printf("file not exist: %s\n", files[index]);
+            continue;
+        }
+
+        if (remove(files[index]))
+            printf("rm error: %s\n", files[index]);
+    }
 }
 
 void ln(char **args) {
@@ -397,7 +444,32 @@ void ed(char *file) {
         return;
     }
 
-    //
+//    if (!access(file, F_OK)) {
+//
+//    }
+
+    int fd;
+    if ((fd = creat(file, 0644)) == -1) {
+        perror("create file error");
+        return;
+    }
+
+    char buffer[BUFFER_SIZE];
+    int wc;
+    while (1) {
+        fgets(buffer, BUFFER_SIZE, stdin);
+        if (!strcmp(buffer, ":wq\n"))
+            break;
+
+        wc = 0;
+        while (buffer[wc] != '\0')
+            ++wc;
+
+        if (write(fd, buffer, wc) == -1)
+            perror("ed error");
+    }
+
+    close(fd);
 }
 
 void touch(char *file) {
@@ -467,12 +539,12 @@ int main() {
 
         char *cmd[CMD_SIZE] = {NULL};
         int index = 0, flag = 0;
-        for (int i = 0; i < BUFFER_SIZE && buffer[i] != '\0'; ++i) {
+        buffer[BUFFER_SIZE - 1] = '\0';
+        for (int i = 0; i < BUFFER_SIZE -1 && buffer[i] != '\0'; ++i) {
             if (buffer[i] != ' ' && !flag) {
                 cmd[index] = buffer + i;
                 flag = 1;
             } else if (buffer[i] == ' ' && flag) {
-                // last error
                 buffer[i] = '\0';
                 flag = 0;
                 ++index;
@@ -501,9 +573,9 @@ int main() {
         else if (!strcmp(cmd[0], "chgrp"))
             myChgrp(cmd[2], cmd[1]);
         else if (!strcmp(cmd[0], "mkdir"))
-            myMkdir(cmd[1]);
+            myMkdir(cmd);
         else if (!strcmp(cmd[0], "rmdir"))
-            myRmdir(cmd[1]);
+            myRmdir(cmd);
         else if (!strcmp(cmd[0], "umask"))
             myUmask(cmd[1]);
         else if (!strcmp(cmd[0], "mv"))
@@ -511,7 +583,7 @@ int main() {
         else if (!strcmp(cmd[0], "cp"))
             cp(cmd[1], cmd[2]);
         else if (!strcmp(cmd[0], "rm"))
-            rm(cmd[1]);
+            rm(cmd);
         else if (!strcmp(cmd[0], "ln"))
             ln(cmd);
         else if (!strcmp(cmd[0], "cat"))
