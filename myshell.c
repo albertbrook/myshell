@@ -24,6 +24,30 @@ struct desc {
     char *describe;
 };
 
+struct desc myDesc[CMD_COUNT] = {
+        {"cd", "cd 改变目录\ncd [path]\nNULL\t家目录\n~\t家目录\n-\t上一级目录"},
+        {"pwd", "pwd 打印当前工作目录"},
+        {"lls", "lls 列出所有文件和文件夹\n红色\t文件夹\n绿色\t文件\n蓝色\t符号链接"},
+        {"pid", "pid 查看pid"},
+        {"exit", "exit 退出"},
+        {"chmod", "chmod 改变权限\nchmod mode file\nmode\t3位8进制数，如777\nfile\t文件名"},
+        {"chown", "chown 改变文件所属用户\nchown user file\nuser\t用户\nfile\t文件"},
+        {"chgrp", "chgrp 改变文件所属用户组\nchgrp group file\ngroup\t用户组\nfile\t文件"},
+        {"mkdir", "mkdir 创建文件夹\nmkdir directory..\ndirectory\t文件名"},
+        {"rmdir", "rmdir 删除文件夹\nrmdir directory..\ndirectory\t文件名"},
+        {"umask", "umask 显示或设定文件模式掩码\numask [mode]\nNULL\t显示文件模式掩码\nmode\t3位8进制数，如777"},
+        {"mv", "mv 移动或重命名文件及文件夹\nmv oldFile newFile\noldFile\t源文件\nnewFile\t目标文件"},
+        {"cp", "cp 复制文件\ncp oldFile newFile\noldFile\t源文件\nnewFile\t目标文件"},
+        {"rm", "rm 删除文件或文件夹\nrm file..\nfile\t文件名"},
+        {"ln", "ln 为目标文件创建链接\nln oldFile newFile\t创建硬链接\nln -s oldFile newFile\t创建软链接"},
+        {"cat", "cat 查看文件内容\ncat file\nfile\t文件名"},
+        {"passwd", "passwd 修改用户密码\npasswd [user]\nNULL\t修改当前用户密码\nuser\t修改user用户密码"},
+        {"ed", "ed 输入内容并保存\ned file\nfile\t文件名\n:wq结束输入"},
+        {"touch", "touch 创建空白文件\ntouch file\nfile\t文件名"},
+        {"format", "format 改变命令提示符样式\nformat [style]\n0\t关闭所有属性\n1\t设置高亮度\n4\t下划线\n5\t闪烁\n7\t反显\n8\t消隐\n3[0-7]\t设置前景色\n4[0-7]\t设置背景色\n\n0\t1\t2\t3\t4\t5\t6\t7\n黑\t红\t绿\t黄\t蓝\t紫\t深绿\t白色"},
+        {"c", "c 清屏"}
+};
+
 // 字符数组转3位8进制数
 int atoo(char *arr) {
     if (arr == NULL)
@@ -59,30 +83,6 @@ int atoo(char *arr) {
 
     return a;
 }
-
-struct desc myDesc[CMD_COUNT] = {
-        {"cd",  "cd 进入目录\ncd [path]\nNULL\t家目录\n~\t家目录\n-\t上一级目录"},
-        {"pwd", "pwd 打印当前工作目录"},
-        {"lls", "lls 列出所有文件和文件夹"},
-        {"pid", "pid 打印pid"},
-        {"exit", "exit 退出"},
-        {"chmod", "chmod 改变权限"},
-        {"chown", ""},
-        {"chgrp", ""},
-        {"mkdir", ""},
-        {"rmdir", ""},
-        {"umask", ""},
-        {"mv", ""},
-        {"cp", ""},
-        {"rm", ""},
-        {"ln", ""},
-        {"cat", ""},
-        {"passwd", ""},
-        {"ed", ""},
-        {"touch", ""},
-        {"format", ""},
-        {"c", ""}
-};
 
 void help(char *cmd) {
     for (int i = 0; i < CMD_COUNT && myDesc[i].command != NULL; ++i) {
@@ -136,10 +136,13 @@ void lls(char *dir) {
 
     struct dirent *ptr;
     while (ptr = readdir(d)) {
+        // 文件夹
         if (ptr->d_type == 4)
             printf("\033[31m%s\t", ptr->d_name);
+        // 文件
         else if (ptr->d_type == 8)
             printf("\033[32m%s\t", ptr->d_name);
+        // 符号链接
         else if (ptr->d_type == 10)
             printf("\033[34m%s\t", ptr->d_name);
     }
@@ -227,6 +230,7 @@ void myMkdir(char **dirs) {
         return;
     }
 
+    // 根据参数创建多个文件
     int index = 0;
     while (1) {
         ++index;
@@ -293,6 +297,7 @@ void mv(char *oldName, char *newName) {
     }
 
     if (!access(newName, F_OK)) {
+        // 移动到文件夹下
         if (opendir(newName) != NULL) {
             char newFile[PATH_SIZE] = "\0";
             strcat(newFile, newName);
@@ -444,16 +449,14 @@ void ed(char *file) {
         return;
     }
 
-//    if (!access(file, F_OK)) {
-//
-//    }
-
+    // 创建文件
     int fd;
     if ((fd = creat(file, 0644)) == -1) {
         perror("create file error");
         return;
     }
 
+    // 使用fgets输入一行保存一行
     char buffer[BUFFER_SIZE];
     int wc;
     while (1) {
@@ -489,6 +492,7 @@ void touch(char *file) {
         return;
     }
 
+    // 创建空白文件
     char buffer[] = "\0";
     if (write(fd, buffer, 0) == -1)
         perror("touch error");
@@ -510,6 +514,7 @@ void clear() {
     printf("\033c");
 }
 
+// 调用外部程序
 void call(char **args) {
     // 创建子进程
     pid_t pid = fork();
@@ -537,6 +542,7 @@ int main() {
             continue;
         }
 
+        // 读到第一个非空字符时开始记录参数，一直到读到空字符结束当前参数，以此循环过滤出有效命令
         char *cmd[CMD_SIZE] = {NULL};
         int index = 0, flag = 0;
         buffer[BUFFER_SIZE - 1] = '\0';
