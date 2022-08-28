@@ -167,7 +167,7 @@ void myChmod(char *file, char *arg) {
     }
 
     int permission;
-    if (permission = atoo(arg)) {
+    if ((permission = atoo(arg)) == -1) {
         printf("invalid mode: %s\n", arg);
         return;
     }
@@ -276,7 +276,7 @@ void myUmask(char *newUmask) {
     }
 
     int mask;
-    if (mask = atoo(newUmask)) {
+    if ((mask = atoo(newUmask)) == -1) {
         printf("not octal number\n");
         return;
     }
